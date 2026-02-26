@@ -23,7 +23,8 @@ export async function packageFinalVideo(
 ): Promise<string> {
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
   const safeTitle = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '').toLowerCase();
-  const fileName = `${safeTitle}-${format}-${timestamp}.mp4`;
+  const safeFormat = format.replace(/[^a-zA-Z0-9-]/g, '');
+  const fileName = `${safeTitle}-${safeFormat}-${timestamp}.mp4`;
   const finalDir = path.join(projectsRoot, projectName, 'output/final');
   const finalPath = path.join(finalDir, fileName);
 
