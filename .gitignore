@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+projects/*/output/
+projects/*/cache/
+*.mp4
+*.mp3
