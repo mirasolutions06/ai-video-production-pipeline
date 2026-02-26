@@ -11,7 +11,7 @@ export function hashKlingRequest(
   prompt: string,
   options: Record<string, unknown>,
 ): string {
-  const payload = JSON.stringify({ prompt, ...options });
+  const payload = JSON.stringify({ ...options, prompt });
   return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16);
 }
 
@@ -27,7 +27,14 @@ export function getCacheManifestPath(projectsRoot: string, projectName: string):
  */
 export async function loadCacheManifest(manifestPath: string): Promise<KlingCacheManifest> {
   if (!(await fs.pathExists(manifestPath))) return {};
-  return fs.readJson(manifestPath) as Promise<KlingCacheManifest>;
+  try {
+    return await fs.readJson(manifestPath) as KlingCacheManifest;
+  } catch {
+    throw new Error(
+      `Failed to parse cache manifest at ${manifestPath}. ` +
+      `The file may be corrupt. Delete it to reset the cache.`,
+    );
+  }
 }
 
 /**

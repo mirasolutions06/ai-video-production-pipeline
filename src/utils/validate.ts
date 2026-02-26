@@ -26,6 +26,14 @@ export function validateConfig(config: VideoConfig): void {
     );
   }
 
+  const VALID_FORMATS = ['youtube-short', 'tiktok', 'ad-16x9', 'ad-1x1', 'web-hero'] as const;
+  if (!VALID_FORMATS.includes(config.format as typeof VALID_FORMATS[number])) {
+    throw new Error(
+      `config.json "format" value "${config.format}" is not valid. ` +
+      `Valid values: ${VALID_FORMATS.join(' | ')}`,
+    );
+  }
+
   if (!config.title) {
     throw new Error(`config.json is missing "title".`);
   }
@@ -48,9 +56,9 @@ export function validateConfig(config: VideoConfig): void {
     }
   }
 
-  if (config.music && config.musicVolume !== undefined) {
-    if (config.musicVolume < 0 || config.musicVolume > 1) {
-      throw new Error(`config.json "musicVolume" must be between 0 and 1.`);
+  if (config.musicVolume !== undefined) {
+    if (isNaN(config.musicVolume) || config.musicVolume < 0 || config.musicVolume > 1) {
+      throw new Error(`config.json "musicVolume" must be a number between 0 and 1.`);
     }
   }
 }

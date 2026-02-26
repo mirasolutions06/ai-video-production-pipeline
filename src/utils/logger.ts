@@ -1,4 +1,4 @@
-/** Timestamped step logger with ✅ / ❌ / ⏭ / ℹ indicators */
+/** Timestamped step logger. Levels: 🎬 step, ✅ success, ⏭ skip, ⚠️ warn, ❌ error, ℹ️ info */
 
 const ts = (): string => new Date().toISOString().slice(11, 19);
 
