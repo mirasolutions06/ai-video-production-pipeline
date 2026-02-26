@@ -14,7 +14,6 @@
     "@remotion/cli": "^4.0.0",
     "@remotion/renderer": "^4.0.0",
     "@remotion/transitions": "^4.0.0",
-    "remotion": "^4.0.0",
     "commander": "^12.0.0",
     "dotenv": "^16.4.5",
     "elevenlabs": "^0.16.0",
@@ -22,13 +21,15 @@
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.47.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.2",
     "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.7",
     "tsx": "^4.15.6",
     "typescript": "^5.5.2"
   }

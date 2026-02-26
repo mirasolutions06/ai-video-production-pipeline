@@ -9,7 +9,7 @@ export type VideoFormat =
 
 export type CaptionStyle = 'word-by-word' | 'line-by-line';
 export type TransitionType = 'crossfade' | 'cut' | 'wipe';
-export type KlingModel = 'kling-v1' | 'kling-v1-5' | 'kling-v2';
+export type KlingModel = 'kling-v1' | 'kling-v1-5' | 'kling-v2' | 'kling-v2-5';
 export type AspectRatio = '9:16' | '16:9' | '1:1';
 
 // ─── Config Interfaces ─────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ export interface VideoConfig {
   script?: string;
   /** ElevenLabs voice ID. Run `npm run pipeline -- --project X --list-voices` to see options. */
   voiceId?: string;
+  /** At least one clip required. Use prompt, imageReference, or url per clip. */
   clips: KlingClip[];
   /** Default: crossfade */
   transition?: TransitionType;
@@ -87,8 +88,10 @@ export interface KlingCacheManifest {
 
 export interface ElevenLabsOptions {
   voiceId: string;
+  /** Maps to SDK request field: model_id */
   modelId?: string;
   stability?: number;
+  /** Maps to SDK VoiceSettings field: similarity_boost */
   similarityBoost?: number;
   style?: number;
 }
