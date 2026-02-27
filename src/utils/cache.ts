@@ -1,13 +1,13 @@
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs-extra';
-import type { KlingCacheManifest, KlingCacheEntry } from '../types/index.js';
+import type { ClipCacheManifest, ClipCacheEntry } from '../types/index.js';
 
 /**
  * Generates a deterministic SHA-256 hash from a prompt + options object.
- * Used to identify whether a Kling clip has already been generated.
+ * Used to identify whether a clip has already been generated.
  */
-export function hashKlingRequest(
+export function hashVideoRequest(
   prompt: string,
   options: Record<string, unknown>,
 ): string {
@@ -16,19 +16,19 @@ export function hashKlingRequest(
 }
 
 /**
- * Returns the path to the Kling cache manifest for a given project.
+ * Returns the path to the clip cache manifest for a given project.
  */
 export function getCacheManifestPath(projectsRoot: string, projectName: string): string {
-  return path.join(projectsRoot, projectName, 'cache', 'kling-cache.json');
+  return path.join(projectsRoot, projectName, 'cache', 'fal-cache.json');
 }
 
 /**
- * Loads the Kling cache manifest for a project. Returns empty object if none exists.
+ * Loads the clip cache manifest for a project. Returns empty object if none exists.
  */
-export async function loadCacheManifest(manifestPath: string): Promise<KlingCacheManifest> {
+export async function loadCacheManifest(manifestPath: string): Promise<ClipCacheManifest> {
   if (!(await fs.pathExists(manifestPath))) return {};
   try {
-    return await fs.readJson(manifestPath) as KlingCacheManifest;
+    return await fs.readJson(manifestPath) as ClipCacheManifest;
   } catch {
     throw new Error(
       `Failed to parse cache manifest at ${manifestPath}. ` +
@@ -38,7 +38,7 @@ export async function loadCacheManifest(manifestPath: string): Promise<KlingCach
 }
 
 /**
- * Saves an entry to the Kling cache manifest.
+ * Saves an entry to the clip cache manifest.
  */
 export async function saveCacheEntry(
   manifestPath: string,
@@ -46,7 +46,7 @@ export async function saveCacheEntry(
   clipPath: string,
 ): Promise<void> {
   const manifest = await loadCacheManifest(manifestPath);
-  const entry: KlingCacheEntry = {
+  const entry: ClipCacheEntry = {
     hash,
     clipPath,
     createdAt: new Date().toISOString(),

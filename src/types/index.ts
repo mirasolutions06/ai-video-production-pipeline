@@ -9,7 +9,6 @@ export type VideoFormat =
 
 export type CaptionStyle = 'word-by-word' | 'line-by-line';
 export type TransitionType = 'crossfade' | 'cut' | 'wipe';
-export type KlingModel = 'kling-v1' | 'kling-v1-5' | 'kling-v2' | 'kling-v2-5';
 export type AspectRatio = '9:16' | '16:9' | '1:1';
 
 // ─── Config Interfaces ─────────────────────────────────────────────────────
@@ -27,12 +26,12 @@ export interface CTAConfig {
   durationSeconds?: number;
 }
 
-export interface KlingClip {
+export interface VideoClip {
   /** Text prompt describing what should happen in this clip */
   prompt?: string;
   /** Absolute or project-relative path to Gemini storyboard image (enables image-to-video mode) */
   imageReference?: string;
-  /** Pre-generated clip URL — skip Kling generation entirely */
+  /** Pre-generated clip URL — skip generation entirely */
   url?: string;
   /** Clip duration in seconds. Default: 5 */
   duration?: 5 | 10;
@@ -47,7 +46,7 @@ export interface VideoConfig {
   /** ElevenLabs voice ID. Run `npm run pipeline -- --project X --list-voices` to see options. */
   voiceId?: string;
   /** At least one clip required. Use prompt, imageReference, or url per clip. */
-  clips: KlingClip[];
+  clips: VideoClip[];
   /** Default: crossfade */
   transition?: TransitionType;
   /** Default: true for shorts/tiktok, false for web-hero */
@@ -64,24 +63,23 @@ export interface VideoConfig {
   musicVolume?: number;
 }
 
-// ─── Kling API ─────────────────────────────────────────────────────────────
+// ─── Video Generation ───────────────────────────────────────────────────────
 
-export interface KlingOptions {
+export interface VideoGenOptions {
   aspectRatio: AspectRatio;
   duration: 5 | 10;
-  model?: KlingModel;
   projectName: string;
   sceneIndex: number;
 }
 
-export interface KlingCacheEntry {
+export interface ClipCacheEntry {
   hash: string;
   clipPath: string;
   createdAt: string;
 }
 
-export interface KlingCacheManifest {
-  [hash: string]: KlingCacheEntry;
+export interface ClipCacheManifest {
+  [hash: string]: ClipCacheEntry;
 }
 
 // ─── ElevenLabs ────────────────────────────────────────────────────────────
@@ -137,6 +135,8 @@ export interface CompositionProps {
   assets: ProjectAssets;
   captions: CaptionWord[];
   clipPaths: string[];
+  /** Absolute path to the ElevenLabs-generated voiceover MP3. Undefined if no script. */
+  voiceoverPath?: string;
 }
 
 // ─── Format Metadata (derived) ─────────────────────────────────────────────

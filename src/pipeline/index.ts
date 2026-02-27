@@ -8,10 +8,11 @@ import { validateConfig, validateEnv } from '../utils/validate.js';
 import { AssetLoader } from './assets.js';
 import { generateVoiceover } from './elevenlabs.js';
 import { transcribeAudio } from './whisper.js';
-import { generateKlingClip } from './kling.js';
+import { generateFalClip } from './fal.js';
 import { packageFinalVideo } from './export.js';
+import { AirtableLogger } from './airtable.js';
 import { getFormatMeta } from '../remotion/helpers/timing.js';
-import type { VideoConfig, KlingOptions, CaptionWord } from '../types/index.js';
+import type { VideoConfig, VideoGenOptions, CaptionWord } from '../types/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS_ROOT = path.resolve(process.cwd(), 'projects');
@@ -39,7 +40,7 @@ const FORMAT_TO_COMPOSITION: Record<string, string> = {
  * 2. Load project assets
  * 3. Generate voiceover (ElevenLabs) — skip if exists
  * 4. Transcribe voiceover (Whisper) — skip if cached
- * 5. Generate Kling video clips — skip if cached
+ * 5. Generate video clips via fal.ai — skip if cached
  * 6. Bundle and render with Remotion
  * 7. Package final video with timestamp
  *
@@ -50,7 +51,12 @@ export async function runPipeline(projectName: string): Promise<string> {
   const projectDir = path.join(PROJECTS_ROOT, projectName);
 
   // ── Environment validation ──────────────────────────────────────────────
-  validateEnv(['KLING_API_KEY', 'KLING_API_SECRET', 'ELEVENLABS_API_KEY', 'OPENAI_API_KEY']);
+  validateEnv(['FAL_KEY', 'ELEVENLABS_API_KEY', 'OPENAI_API_KEY']);
+
+  // ── Airtable run tracking ───────────────────────────────────────────────
+  const airtable = new AirtableLogger();
+  let airtableRecordId: string | null = null;
+  const startTime = Date.now();
 
   // ── Config loading ──────────────────────────────────────────────────────
   const configPath = path.join(projectDir, 'config.json');
@@ -65,7 +71,9 @@ export async function runPipeline(projectName: string): Promise<string> {
   validateConfig(config);
 
   const formatMeta = getFormatMeta(config.format);
+  airtableRecordId = await airtable.createRun(projectName, config.format, config);
 
+  try {
   // ── Asset loading ───────────────────────────────────────────────────────
   const loader = new AssetLoader(PROJECTS_ROOT, projectName);
   const assets = await loader.load();
@@ -104,14 +112,14 @@ export async function runPipeline(projectName: string): Promise<string> {
     logger.skip('Captions enabled but no voiceover — captions will be empty.');
   }
 
-  // ── Step 3: Generate Kling clips ─────────────────────────────────────────
+  // ── Step 3: Generate video clips ─────────────────────────────────────────
   const clipPaths: string[] = [];
 
   for (let i = 0; i < config.clips.length; i++) {
     const clip = config.clips[i];
     if (!clip) continue;
 
-    // Use pre-generated clip URL if provided — download and skip Kling API
+    // Use pre-generated clip URL if provided — download and skip fal.ai API
     if (clip.url !== undefined) {
       const prebuiltPath = path.join(
         PROJECTS_ROOT,
@@ -138,10 +146,9 @@ export async function runPipeline(projectName: string): Promise<string> {
     // Match storyboard frame for this scene (1-based sceneIndex)
     const storyboardFrame = assets.storyboardFrames.find((f) => f.sceneIndex === i + 1);
 
-    const options: KlingOptions = {
+    const options: VideoGenOptions = {
       aspectRatio: formatMeta.aspectRatio,
       duration: clip.duration ?? 5,
-      model: 'kling-v1-5',
       projectName,
       sceneIndex: i + 1,
     };
@@ -149,7 +156,7 @@ export async function runPipeline(projectName: string): Promise<string> {
     // Prefer storyboard auto-discovered frame, fall back to explicit imageReference in clip config
     const imageRef = storyboardFrame?.imagePath ?? clip.imageReference;
 
-    const clipPath = await generateKlingClip(
+    const clipPath = await generateFalClip(
       clip.prompt ?? '',
       options,
       PROJECTS_ROOT,
@@ -174,23 +181,44 @@ export async function runPipeline(projectName: string): Promise<string> {
 
   logger.step(`Bundling Remotion project...`);
 
+  // Remotion's renderer only serves files via its local HTTP server (no file:// support).
+  // publicDir makes the project folder available at the bundle root, so clips and
+  // voiceover can be referenced with staticFile() as relative paths.
+  const publicDir = path.join(PROJECTS_ROOT, projectName);
+
   const bundleLocation = await bundle({
     entryPoint: REMOTION_ENTRY,
+    publicDir,
     onProgress: (progress: number) => {
       if (progress % 20 === 0) {
         logger.info(`  Bundle progress: ${progress}%`);
       }
     },
+    webpackOverride: (config) => ({
+      ...config,
+      resolve: {
+        ...config.resolve,
+        extensionAlias: {
+          '.js': ['.tsx', '.ts', '.js'],
+        },
+      },
+    }),
   });
 
   const totalSeconds = config.clips.reduce((sum, c) => sum + (c.duration ?? 5), 0);
   const totalFrames = Math.round(totalSeconds * formatMeta.fps);
 
+  // Paths must be relative to publicDir so staticFile() can serve them
+  const relativeClipPaths = clipPaths.map((p) => path.relative(publicDir, p));
+  const relativeVoiceoverPath =
+    voiceoverPath !== undefined ? path.relative(publicDir, voiceoverPath) : undefined;
+
   const inputProps = {
     config,
     assets,
     captions,
-    clipPaths,
+    clipPaths: relativeClipPaths,
+    voiceoverPath: relativeVoiceoverPath,
   };
 
   logger.step(`Selecting composition: ${compositionId}...`);
@@ -233,5 +261,12 @@ export async function runPipeline(projectName: string): Promise<string> {
 
   await fs.remove(tempOutputPath);
 
+  const elapsedSeconds = (Date.now() - startTime) / 1000;
+  await airtable.completeRun(airtableRecordId, finalPath, elapsedSeconds);
+
   return finalPath;
+  } catch (err) {
+    await airtable.failRun(airtableRecordId, err instanceof Error ? err.message : String(err));
+    throw err;
+  }
 }

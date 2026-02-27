@@ -20,6 +20,7 @@ export const YoutubeShort: React.FC<CompositionProps> = ({
   assets,
   captions,
   clipPaths,
+  voiceoverPath,
 }) => {
   const { fps, durationInFrames } = useVideoConfig();
 
@@ -52,6 +53,11 @@ export const YoutubeShort: React.FC<CompositionProps> = ({
           );
         })}
       </TransitionSeries>
+
+      {/* Voiceover — primary audio track at full volume */}
+      {voiceoverPath !== undefined && (
+        <Audio src={staticFile(voiceoverPath)} volume={1} />
+      )}
 
       {/* Background music at low volume */}
       {config.music === true && assets.backgroundMusic !== undefined && (

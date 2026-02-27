@@ -21,6 +21,7 @@ export const Ad: React.FC<CompositionProps> = ({
   assets,
   captions,
   clipPaths,
+  voiceoverPath,
 }) => {
   const { fps, durationInFrames } = useVideoConfig();
 
@@ -56,6 +57,11 @@ export const Ad: React.FC<CompositionProps> = ({
           );
         })}
       </TransitionSeries>
+
+      {/* Voiceover — primary audio track at full volume */}
+      {voiceoverPath !== undefined && (
+        <Audio src={staticFile(voiceoverPath)} volume={1} />
+      )}
 
       {/* Background music */}
       {config.music === true && assets.backgroundMusic !== undefined && (
