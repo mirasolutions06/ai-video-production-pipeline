@@ -8,9 +8,10 @@ import { logger } from '../utils/logger.js';
 program
   .requiredOption('--project <name>', 'Project name to run the pipeline for')
   .option('--list-voices', 'List available ElevenLabs voices and exit')
+  .option('--storyboard-only', 'Generate Gemini storyboard frames and stop for review')
   .parse();
 
-const opts = program.opts<{ project: string; listVoices?: boolean }>();
+const opts = program.opts<{ project: string; listVoices?: boolean; storyboardOnly?: boolean }>();
 
 async function main(): Promise<void> {
   if (opts.listVoices === true) {
@@ -20,8 +21,17 @@ async function main(): Promise<void> {
 
   logger.step(`Starting pipeline for project: ${opts.project}`);
 
-  const finalPath = await runPipeline(opts.project);
-  logger.success(`Pipeline complete! Final video: ${finalPath}`);
+  const finalPath = await runPipeline(
+    opts.project,
+    opts.storyboardOnly === true ? { storyboardOnly: true } : undefined,
+  );
+
+  if (opts.storyboardOnly === true) {
+    logger.success(`Storyboard ready — review images at: ${finalPath}`);
+    logger.info('Delete any you want regenerated, then re-run without --storyboard-only.');
+  } else {
+    logger.success(`Pipeline complete! Final video: ${finalPath}`);
+  }
 }
 
 main().catch((err: unknown) => {

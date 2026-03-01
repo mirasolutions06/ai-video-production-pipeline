@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs-extra';
 import path from 'path';
 import { logger } from '../utils/logger.js';
@@ -86,16 +87,33 @@ export class AirtableLogger {
     if (!this.isConfigured || recordId === null) return;
 
     try {
-      // Upload MP4 as attachment to "Output Video" field
+      // Upload MP4 as attachment to "Output Video" field.
+      // We construct the multipart body manually so the Content-Type boundary is
+      // explicit — Node.js native FormData can omit it when combined with custom headers.
       const videoBuffer = await fs.readFile(finalPath);
       const filename = path.basename(finalPath);
-
-      const formData = new FormData();
-      formData.append('file', new Blob([videoBuffer], { type: 'video/mp4' }), filename);
+      const boundary = `----AirtableBoundary${crypto.randomBytes(8).toString('hex')}`;
+      const CRLF = '\r\n';
+      const partHead = Buffer.from(
+        `--${boundary}${CRLF}` +
+        `Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}` +
+        `Content-Type: video/mp4${CRLF}` +
+        CRLF,
+      );
+      const partTail = Buffer.from(`${CRLF}--${boundary}--${CRLF}`);
+      const body = Buffer.concat([partHead, videoBuffer, partTail]);
 
       const uploadRes = await fetch(
         `${AIRTABLE_CONTENT_API}/${this.baseId}/${recordId}/Output%20Video/uploadAttachment`,
-        { method: 'POST', headers: this.authHeader, body: formData },
+        {
+          method: 'POST',
+          headers: {
+            ...this.authHeader,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': String(body.length),
+          },
+          body,
+        },
       );
 
       if (!uploadRes.ok) {

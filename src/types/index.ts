@@ -139,6 +139,59 @@ export interface CompositionProps {
   voiceoverPath?: string;
 }
 
+// ─── Director / AI Planning ─────────────────────────────────────────────────
+
+export interface DirectorVoiceSettings {
+  stability: number;
+  similarityBoost: number;
+  style: number;
+  /** Original script text with optional ElevenLabs SSML pause tags added */
+  enrichedScript: string;
+}
+
+export interface DirectorClipPlan {
+  sceneIndex: number;
+  /** Original prompt + " — " + cinematography notes. Max 400 chars. */
+  enrichedPrompt: string;
+  continuityNote: string;
+  cameraMove: string;
+  lighting: string;
+  colorGrade: string;
+  pace: string;
+}
+
+export interface DirectorPlan {
+  generatedAt: string;
+  configHash: string;
+  visualStyleSummary: string;
+  clips: DirectorClipPlan[];
+  voice: DirectorVoiceSettings;
+  /** Only set when config.hookText was absent */
+  suggestedHookText?: string;
+  /** Only set when config.cta was absent */
+  suggestedCta?: { text: string; subtext?: string };
+}
+
+export interface DirectorCacheEntry {
+  configHash: string;
+  plan: DirectorPlan;
+  cachedAt: string;
+}
+
+export interface StoryboardGenOptions {
+  sceneIndex: number;
+  /** Director-enriched prompt for this clip */
+  prompt: string;
+  /** For aspect ratio guidance ('9:16' vs '16:9') */
+  format: VideoFormat;
+  /** From DirectorPlan, for cross-scene consistency */
+  visualStyleSummary?: string;
+  /** scene-(N-1)-lastframe.png if it exists */
+  previousLastFramePath?: string;
+  projectsRoot: string;
+  projectName: string;
+}
+
 // ─── Format Metadata (derived) ─────────────────────────────────────────────
 
 export interface FormatMeta {

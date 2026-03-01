@@ -11,8 +11,8 @@ import {
 import { extractLastFrame } from './frames.js';
 import type { VideoGenOptions } from '../types/index.js';
 
-const FAL_KLING_I2V = 'fal-ai/kling-video/v1.6/standard/image-to-video';
-const FAL_KLING_T2V = 'fal-ai/kling-video/v1.6/standard/text-to-video';
+const FAL_KLING_I2V = 'fal-ai/kling-video/v2.1/pro/image-to-video';
+const FAL_KLING_T2V = 'fal-ai/kling-video/v2.1/master/text-to-video';
 
 interface FalKlingOutput {
   video: { url: string };
@@ -95,12 +95,13 @@ async function generateImageToVideo(
   const imageUrl = `data:${mimeType};base64,${base64Image}`;
 
   const result = await fal.subscribe(FAL_KLING_I2V, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     input: {
       prompt,
       image_url: imageUrl,
       duration: options.duration > 5 ? '10' : '5',
       aspect_ratio: options.aspectRatio,
-    },
+    } as any,
     onQueueUpdate: (update: QueueStatus) => {
       if (update.status === 'IN_QUEUE') {
         logger.info(`  Scene ${options.sceneIndex}: queued (position ${update.queue_position ?? '?'})`);

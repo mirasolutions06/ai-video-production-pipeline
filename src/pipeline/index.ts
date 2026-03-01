@@ -11,6 +11,8 @@ import { transcribeAudio } from './whisper.js';
 import { generateFalClip } from './fal.js';
 import { packageFinalVideo } from './export.js';
 import { AirtableLogger } from './airtable.js';
+import { runDirector } from './director.js';
+import { generateStoryboardFrame } from './storyboard.js';
 import { getFormatMeta } from '../remotion/helpers/timing.js';
 import type { VideoConfig, VideoGenOptions, CaptionWord } from '../types/index.js';
 
@@ -47,7 +49,7 @@ const FORMAT_TO_COMPOSITION: Record<string, string> = {
  * @param projectName - Folder name under projects/
  * @returns Absolute path to the final rendered MP4
  */
-export async function runPipeline(projectName: string): Promise<string> {
+export async function runPipeline(projectName: string, runOpts?: { storyboardOnly?: boolean }): Promise<string> {
   const projectDir = path.join(PROJECTS_ROOT, projectName);
 
   // ── Environment validation ──────────────────────────────────────────────
@@ -67,11 +69,13 @@ export async function runPipeline(projectName: string): Promise<string> {
     );
   }
 
-  const config = (await fs.readJson(configPath)) as VideoConfig;
+  let config = (await fs.readJson(configPath)) as VideoConfig;
   validateConfig(config);
 
   const formatMeta = getFormatMeta(config.format);
-  airtableRecordId = await airtable.createRun(projectName, config.format, config);
+  if (runOpts?.storyboardOnly !== true) {
+    airtableRecordId = await airtable.createRun(projectName, config.format, config);
+  }
 
   try {
   // ── Asset loading ───────────────────────────────────────────────────────
@@ -88,15 +92,36 @@ export async function runPipeline(projectName: string): Promise<string> {
     `└────────────────────────────────────────────────────┘`,
   );
 
+  // ── Director step ────────────────────────────────────────────────────────
+  const directorPlan = await runDirector(config, assets, PROJECTS_ROOT, projectName);
+
+  // Apply Director suggestions for missing hookText / CTA (never overrides explicit config values)
+  if (directorPlan?.suggestedHookText !== undefined && config.hookText === undefined) {
+    config = { ...config, hookText: directorPlan.suggestedHookText };
+    logger.info(`Director: applying suggested hookText: "${directorPlan.suggestedHookText}"`);
+  }
+  if (directorPlan?.suggestedCta !== undefined && config.cta === undefined) {
+    config = { ...config, cta: directorPlan.suggestedCta };
+    logger.info(`Director: applying suggested CTA: "${directorPlan.suggestedCta.text}"`);
+  }
+
   // ── Step 1: Generate voiceover ──────────────────────────────────────────
+  // Director enriches the script with SSML pause tags and sets optimal voice settings.
+  // Note: generateVoiceover skips if voiceover.mp3 already exists — delete it to regenerate
+  // with Director enrichment if you previously ran without the Director.
   let voiceoverPath: string | undefined;
   if (config.script && config.script.trim().length > 0 && config.voiceId) {
-    voiceoverPath = await generateVoiceover(
-      config.script,
-      { voiceId: config.voiceId },
-      PROJECTS_ROOT,
-      projectName,
-    );
+    const script = directorPlan?.voice.enrichedScript ?? config.script;
+    const voiceOptions = directorPlan
+      ? {
+          voiceId: config.voiceId,
+          stability: directorPlan.voice.stability,
+          similarityBoost: directorPlan.voice.similarityBoost,
+          style: directorPlan.voice.style,
+        }
+      : { voiceId: config.voiceId };
+
+    voiceoverPath = await generateVoiceover(script, voiceOptions, PROJECTS_ROOT, projectName);
   } else {
     logger.skip('No script or voiceId in config — skipping voiceover generation.');
   }
@@ -114,6 +139,7 @@ export async function runPipeline(projectName: string): Promise<string> {
 
   // ── Step 3: Generate video clips ─────────────────────────────────────────
   const clipPaths: string[] = [];
+  let previousLastFramePath: string | undefined = undefined;
 
   for (let i = 0; i < config.clips.length; i++) {
     const clip = config.clips[i];
@@ -143,6 +169,28 @@ export async function runPipeline(projectName: string): Promise<string> {
       continue;
     }
 
+    // Use Director-enriched prompt if available, fall back to raw config prompt
+    const enrichedClipPlan = directorPlan?.clips.find((c) => c.sceneIndex === i + 1);
+    const prompt = enrichedClipPlan?.enrichedPrompt ?? clip.prompt ?? '';
+
+    // Generate storyboard frame via Gemini if not already present.
+    // Scene 1: text-only prompt. Scene N+1: includes previous clip's last frame for continuity.
+    const generatedFrame = await generateStoryboardFrame({
+      sceneIndex: i + 1,
+      prompt,
+      format: config.format,
+      ...(directorPlan?.visualStyleSummary !== undefined && { visualStyleSummary: directorPlan.visualStyleSummary }),
+      ...(previousLastFramePath !== undefined && { previousLastFramePath }),
+      projectsRoot: PROJECTS_ROOT,
+      projectName,
+    });
+
+    // Storyboard-only mode: skip video generation for this clip
+    if (runOpts?.storyboardOnly === true) {
+      previousLastFramePath = undefined; // no lastframe without a generated clip
+      continue;
+    }
+
     // Match storyboard frame for this scene (1-based sceneIndex)
     const storyboardFrame = assets.storyboardFrames.find((f) => f.sceneIndex === i + 1);
 
@@ -153,17 +201,27 @@ export async function runPipeline(projectName: string): Promise<string> {
       sceneIndex: i + 1,
     };
 
-    // Prefer storyboard auto-discovered frame, fall back to explicit imageReference in clip config
-    const imageRef = storyboardFrame?.imagePath ?? clip.imageReference;
+    // Priority: Gemini-generated frame > pre-existing storyboard > config imageReference
+    const imageRef = generatedFrame ?? storyboardFrame?.imagePath ?? clip.imageReference;
 
-    const clipPath = await generateFalClip(
-      clip.prompt ?? '',
-      options,
-      PROJECTS_ROOT,
-      imageRef,
-    );
-
+    const clipPath = await generateFalClip(prompt, options, PROJECTS_ROOT, imageRef);
     clipPaths.push(clipPath);
+
+    // Capture last frame for next scene's Gemini generation
+    const lastFramePath = path.join(
+      PROJECTS_ROOT, projectName, 'assets', 'storyboard', `scene-${i + 1}-lastframe.png`,
+    );
+    if (await fs.pathExists(lastFramePath)) {
+      previousLastFramePath = lastFramePath;
+    }
+  }
+
+  // Early exit: storyboard-only mode — all Gemini frames generated, no Kling calls made
+  if (runOpts?.storyboardOnly === true) {
+    const storyboardDir = path.join(PROJECTS_ROOT, projectName, 'assets', 'storyboard');
+    logger.success('\nStoryboard generation complete!');
+    logger.info(`Review your frames at: ${storyboardDir}`);
+    return storyboardDir;
   }
 
   if (clipPaths.length === 0) {
@@ -240,6 +298,14 @@ export async function runPipeline(projectName: string): Promise<string> {
     codec: 'h264',
     outputLocation: tempOutputPath,
     inputProps,
+    // Move moov atom to the front of the MP4 so web players and Airtable can preview without
+    // downloading the full file first (progressive streaming / faststart).
+    ffmpegOverride: ({ type, args }) => {
+      if (type === 'stitcher') {
+        return [...args.slice(0, -1), '-movflags', '+faststart', args[args.length - 1]!];
+      }
+      return args;
+    },
     onProgress: ({ progress }) => {
       const pct = Math.round(progress * 100);
       if (pct % 10 === 0) {
@@ -266,7 +332,9 @@ export async function runPipeline(projectName: string): Promise<string> {
 
   return finalPath;
   } catch (err) {
-    await airtable.failRun(airtableRecordId, err instanceof Error ? err.message : String(err));
+    if (airtableRecordId !== null) {
+      await airtable.failRun(airtableRecordId, err instanceof Error ? err.message : String(err));
+    }
     throw err;
   }
 }

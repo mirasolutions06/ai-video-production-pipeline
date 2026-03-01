@@ -1,31 +1,16 @@
 {
   "format": "youtube-short",
-  "title": "Nike West Africa",
-  "script": "This ground made you.",
-  "voiceId": "pNInz6obpgDQGcFmaJgB",
+  "title": "my-project",
+  "script": "",
+  "voiceId": "",
   "clips": [
-    {
-      "prompt": "Extreme macro close-up of a worn Nike sneaker resting on dry cracked laterite earth, West Africa, golden hour backlight, fine red dust particles suspended in air, cinematic depth of field",
-      "duration": 1.5
-    },
-    {
-      "prompt": "Slow motion foot stomp on dry red laterite ground, violent explosion of red dust cloud rising in all directions, low angle dramatic shot, intense golden West African backlight, Nike ad cinematic style",
-      "duration": 2
-    },
-    {
-      "prompt": "Young West African male athlete sprinting hard through a narrow Lagos street, hand-painted shop signs and colorful Ankara fabric stalls blurred in background, aggressive motion blur, cinematic 4K, raw energy",
-      "duration": 1
-    },
-    {
-      "prompt": "Heroic silhouette of a young male athlete raising fist against a burnt-orange West African sunset sky, atmospheric red dust haze, cinematic wide shot, epic and triumphant",
-      "duration": 0.5
-    }
+    { "prompt": "", "duration": 5 },
+    { "prompt": "", "duration": 5 },
+    { "prompt": "", "duration": 5 }
   ],
   "transition": "cut",
-  "captions": false,
+  "captions": true,
   "captionStyle": "word-by-word",
   "captionPosition": "bottom",
-  "hookText": "",
-  "music": false,
-  "musicVolume": 0.15
+  "music": false
 }
